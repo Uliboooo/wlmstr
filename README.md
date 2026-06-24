@@ -39,6 +39,7 @@ Then add the package to your Home Manager configuration:
     inputs.wlmstr.packages.${pkgs.system}.default
   ];
 }
+```
 
 ## Run
 
