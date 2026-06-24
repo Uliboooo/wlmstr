@@ -28,7 +28,7 @@
         { pkgs, ... }:
         {
           default = pkgs.rustPlatform.buildRustPackage {
-            pname = cargoToml.package.name;
+            pame = cargoToml.package.name;
             version = cargoToml.package.version;
 
             src = ./.;
