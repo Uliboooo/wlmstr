@@ -28,7 +28,7 @@
         { pkgs, ... }:
         {
           default = pkgs.rustPlatform.buildRustPackage {
-            pame = cargoToml.package.name;
+            pname = cargoToml.package.name;
             version = cargoToml.package.version;
 
             src = ./.;
@@ -36,6 +36,7 @@
             cargoLock = {
               lockFile = ./Cargo.lock;
             };
+            meta.mainProgram = cargoToml.package.name;
           };
         }
       );
