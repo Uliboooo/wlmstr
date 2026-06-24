@@ -159,8 +159,9 @@ impl Status {
     }
 }
 
+///  Stateful wallpaper slideshow CLI for awww
 #[derive(Debug, Parser)]
-#[command(name = PROGRAM_NAME)]
+#[command(version, about, name = PROGRAM_NAME)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -198,7 +199,8 @@ struct Update {
 /// Get status. supports to output in JSON or debug format
 #[derive(Debug, Args)]
 struct StatusCmd {
-    format: StatusFmt,
+    /// Default is Debug
+    format: Option<StatusFmt>,
 }
 
 #[derive(Debug, Clone, ValueEnum)]
@@ -256,7 +258,7 @@ fn run(cli_cmd: Commands) -> Result<(), Error> {
                 st.update(update.derection, list)?
             }
             Commands::Status(sc) => {
-                let res = match sc.format {
+                let res = match sc.format.unwrap_or(StatusFmt::Debug) {
                     StatusFmt::Json => {
                         serde_json::to_string_pretty(&st).map_err(Error::SerializeErr)?
                     }
