@@ -18,6 +18,7 @@ enum Error {
     InsufficientValues,
     SerializeErr(serde_json::Error),
     FileIo(easy_storage::Error),
+    NoWallpaperFound,
 }
 
 impl Display for Error {
@@ -41,6 +42,7 @@ impl Display for Error {
             Error::SerializeErr(e) => write!(f, "Serialize Error: {}", e),
             Error::FailedAwww(v) => write!(f, "failed to process awww: {}", v),
             Error::FileIo(e) => write!(f, "File IO Error: {}", e),
+            Error::NoWallpaperFound => todo!(),
         }
     }
 }
@@ -93,23 +95,36 @@ impl Status {
         }
     }
 
-    fn update(self, derection: Derection, file_list: Vec<PathBuf>) -> Result<Status, Error> {
-        let next = match file_list
+    fn update(self, derection: Direction, file_list: Vec<PathBuf>) -> Result<Status, Error> {
+        let sorted = file_list
             .iter()
-            .sorted()
-            .position(|x| *x == self.paper_path)
-        {
+            .sorted_by_key(|p| p.file_name().unwrap().to_os_string())
+            .collect::<Vec<_>>();
+
+        if sorted.is_empty() {
+            return Err(Error::NoWallpaperFound);
+        }
+
+        let next = match sorted.iter().position(|x| **x == self.paper_path) {
             Some(pos) => match derection {
-                Derection::Sequence => file_list.get(pos + 1),
-                Derection::Previous => file_list.get(pos - 1),
-                Derection::Random => {
+                Direction::Sequence => {
+                    let next = (pos + 1) % sorted.len();
+                    sorted.get(next)
+                }
+                Direction::Previous => {
+                    let prev = if pos == 0 { sorted.len() - 1 } else { pos - 1 };
+                    sorted.get(prev)
+                }
+                // pos.checked_sub(1).and_then(|p| sorted.get(p))},
+                Direction::Random => {
                     let mut rng = rand::rng();
-                    file_list.choose(&mut rng)
+                    sorted.choose(&mut rng)
                 }
             },
-            _ => None,
+            None => None,
         }
-        .unwrap_or(&self.paper_path);
+        .unwrap_or(&&self.paper_path)
+        .to_path_buf();
 
         if !self.paper_path.exists() {
             return Err(Error::NotFoundSpecificImage);
@@ -117,7 +132,7 @@ impl Status {
 
         Ok(Self {
             dir_path: self.dir_path,
-            paper_path: next.to_path_buf(),
+            paper_path: next,
             mode: self.mode,
         })
     }
@@ -193,7 +208,7 @@ impl Display for Mode {
 /// go to next slide
 #[derive(Debug, Args)]
 struct Update {
-    derection: Derection,
+    derection: Direction,
 }
 
 /// Get status. supports to output in JSON or debug format
@@ -210,7 +225,7 @@ enum StatusFmt {
 }
 
 #[derive(Debug, Clone, ValueEnum)]
-enum Derection {
+enum Direction {
     #[value(name = "seq")]
     Sequence,
 
