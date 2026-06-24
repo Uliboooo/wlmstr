@@ -1,0 +1,17 @@
+[package]
+name = "wallpaper_master"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "wlmstr"
+path = "src/main.rs"
+
+[dependencies]
+clap = {version="4.6.1", features = ["derive"]}
+itertools = "0.14"
+rand = "0.10.1"
+easy_storage = "0.4.1"
+serde = {version="1.0.228", featurs = ["derive"]}
+serde_json = "1.0.150"
+
