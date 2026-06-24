@@ -3,7 +3,6 @@ use easy_storage::Storeable;
 use itertools::Itertools;
 use rand::seq::IndexedRandom;
 use serde::{Deserialize, Serialize};
-use std;
 use std::fmt::Display;
 use std::path::PathBuf;
 
@@ -17,7 +16,7 @@ enum Error {
     NotFoundSpecificImage,
     ValueNotSet,
     InsufficientValues,
-    SerializeError(serde_json::Error),
+    SerializeErr(serde_json::Error),
     FileIo(easy_storage::Error),
 }
 
@@ -37,9 +36,9 @@ impl Display for Error {
             ),
             Error::InsufficientValues => write!(
                 f,
-                "Insufficient values; values ​​for dir and start img path are all required for initialization."
+                "Insufficient values; values for dir and start img path are all required for initialization."
             ),
-            Error::SerializeError(e) => write!(f, "Serialize Error: {}", e),
+            Error::SerializeErr(e) => write!(f, "Serialize Error: {}", e),
             Error::FailedAwww(v) => write!(f, "failed to process awww: {}", v),
             Error::FileIo(e) => write!(f, "File IO Error: {}", e),
         }
@@ -60,8 +59,8 @@ impl Display for Status {
         write!(
             f,
             "current dir: {}\ncurrent WallPaper: {}\nMode: {}",
-            self.dir_path.to_string_lossy().to_string(),
-            self.paper_path.to_string_lossy().to_string(),
+            self.dir_path.to_string_lossy(),
+            self.paper_path.to_string_lossy(),
             self.mode
         )
     }
@@ -141,7 +140,7 @@ impl Status {
                 std::process::Command::new("mpbpaper")
                     .args([
                         "*",
-                        &self.paper_path.to_string_lossy().to_string(),
+                        self.paper_path.to_string_lossy().as_ref(),
                         "-o",
                         "no-audio loop",
                         "--fork",
@@ -250,7 +249,7 @@ fn run(cli_cmd: Commands) -> Result<(), Error> {
         Ok(st) => match cli_cmd {
             Commands::Next(update) => {
                 let list = std::fs::read_dir(&st.dir_path)
-                    .map_err(|e| Error::Io(e))?
+                    .map_err(Error::Io)?
                     .filter_map(|f| f.ok())
                     .map(|f| f.path())
                     .collect::<Vec<_>>();
@@ -259,7 +258,7 @@ fn run(cli_cmd: Commands) -> Result<(), Error> {
             Commands::Status(sc) => {
                 let res = match sc.format {
                     StatusFmt::Json => {
-                        serde_json::to_string_pretty(&st).map_err(|e| Error::SerializeError(e))?
+                        serde_json::to_string_pretty(&st).map_err(Error::SerializeErr)?
                     }
                     StatusFmt::Debug => st.to_string(),
                 };
@@ -282,13 +281,10 @@ fn run(cli_cmd: Commands) -> Result<(), Error> {
     };
     new_st
         .save_by_extension(data_path, true)
-        .map_err(|e| Error::FileIo(e))?;
+        .map_err(Error::FileIo)?;
 
     new_st.apply()?;
-    println!(
-        "change to {}",
-        new_st.paper_path.to_string_lossy().to_string()
-    );
+    println!("change to {}", new_st.paper_path.to_string_lossy());
     Ok(())
 }
 
