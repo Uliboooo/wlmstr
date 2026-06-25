@@ -79,13 +79,13 @@ impl Display for Mode {
     }
 }
 
-/// go to next slide
+/// next slide by derection [possible derection: seq, pre, rnd]
 #[derive(Debug, Args)]
 struct Update {
     derection: Direction,
 }
 
-/// Get status. supports to output in JSON or debug format
+/// show status. supports to output in JSON or debug format
 #[derive(Debug, Args)]
 struct StatusCmd {
     /// Default is Debug
