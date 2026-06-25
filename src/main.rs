@@ -144,7 +144,9 @@ fn run(cli_cmd: Commands) -> Result<(), Error> {
                     .filter_map(|f| f.ok())
                     .map(|f| f.path())
                     .collect::<Vec<_>>();
-                st.update(update.derection, list)?
+                let s = st.update(update.derection, list)?;
+                s.apply()?;
+                s
             }
             Commands::Status(sc) => {
                 let res = match sc.format.unwrap_or(StatusFmt::Debug) {
@@ -178,7 +180,6 @@ fn run(cli_cmd: Commands) -> Result<(), Error> {
         .save_by_extension(data_path, true)
         .map_err(Error::FileIo)?;
 
-    new_st.apply()?;
     println!(
         "change to {}",
         new_st.get_current_p_path().to_string_lossy()
