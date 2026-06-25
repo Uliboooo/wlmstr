@@ -2,7 +2,10 @@ use easy_storage::Storeable;
 use itertools::Itertools;
 use rand::seq::IndexedRandom;
 use serde::{Deserialize, Serialize};
-use std::{fmt::Display, path::PathBuf};
+use std::{
+    fmt::Display,
+    path::{Path, PathBuf},
+};
 
 use crate::{Direction, Error, Mode};
 
@@ -40,22 +43,57 @@ impl Status {
         self.paper_path.to_path_buf()
     }
 
-    pub fn set(self, dir: Option<PathBuf>, path: Option<PathBuf>, mode: Option<Mode>) -> Self {
+    pub fn get_dir_path(&self) -> PathBuf {
+        self.dir_path.to_path_buf()
+    }
+
+    pub fn set(
+        self,
+        dir: Option<PathBuf>,
+        path: Option<PathBuf>,
+        mode: Option<Mode>,
+    ) -> Result<Self, Error> {
         let res = match (dir, path, mode) {
             (None, None, None) => (self.dir_path, self.paper_path, self.mode),
             (None, None, Some(v)) => (self.dir_path, self.paper_path, v),
-            (None, Some(v), None) => (self.dir_path, v, self.mode),
-            (None, Some(v), Some(w)) => (self.dir_path, v, w),
-            (Some(v), None, None) => (v, self.paper_path, self.mode),
-            (Some(v), None, Some(w)) => (v, self.paper_path, w),
-            (Some(v), Some(w), None) => (v, w, self.mode),
-            (Some(v), Some(w), Some(x)) => (v, w, x),
+            (None, Some(path), None) => (self.dir_path, path, self.mode),
+            (None, Some(v), Some(mode)) => (self.dir_path, v, mode),
+            (Some(dir), None, None) => {
+                let pp = Self::get_valid_paper_in_dir(&dir)?;
+                (dir, pp, self.mode)
+            }
+            (Some(dir), None, Some(mode)) => {
+                let pp = Self::get_valid_paper_in_dir(&dir)?;
+                (dir, pp, mode)
+            }
+            (Some(dir), Some(path), None) => (dir, path, self.mode),
+            (Some(dir), Some(path), Some(mode)) => (dir, path, mode),
         };
-        Self {
+        Ok(Self {
             dir_path: res.0,
             paper_path: res.1,
             mode: res.2,
-        }
+        })
+    }
+
+    // fn paper_exists(&self) -> Result<bool, std::io::Error> {
+    //     Ok(std::fs::read_dir(&self.dir_path)?
+    //         .filter_map(|f| f.ok())
+    //         .map(|f| f.path())
+    //         .any(|f| f == self.paper_path))
+    // }
+
+    fn get_valid_paper_in_dir<P: AsRef<Path>>(p: P) -> Result<PathBuf, Error> {
+        let res = std::fs::read_dir(&p)
+            .map_err(Error::Io)?
+            // .unwrap()
+            .next()
+            .ok_or(Error::NoWallpaperFound)?
+            .map(|f| f.path())
+            // .unwrap()
+            .map_err(Error::Io)
+            .unwrap();
+        Ok(res)
     }
 
     pub fn update(self, derection: Direction, file_list: Vec<PathBuf>) -> Result<Status, Error> {

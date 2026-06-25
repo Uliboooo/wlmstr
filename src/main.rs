@@ -139,7 +139,7 @@ fn run(cli_cmd: Commands) -> Result<(), Error> {
     let new_st = match Status::load_by_extension(&data_path) {
         Ok(st) => match cli_cmd {
             Commands::Next(update) => {
-                let list = std::fs::read_dir(st.get_current_p_path())
+                let list = std::fs::read_dir(st.get_dir_path())
                     .map_err(Error::Io)?
                     .filter_map(|f| f.ok())
                     .map(|f| f.path())
@@ -156,7 +156,11 @@ fn run(cli_cmd: Commands) -> Result<(), Error> {
                 println!("{}", res);
                 return Ok(());
             }
-            Commands::Set(init) => st.set(init.dir, init.paper_path, init.mode),
+            Commands::Set(input_set_data) => st.set(
+                input_set_data.dir,
+                input_set_data.paper_path,
+                input_set_data.mode,
+            )?,
         },
         Err(_) => {
             // when not found XDG_DATA_HOME/wlmstr/data.json
