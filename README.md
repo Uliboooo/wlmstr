@@ -8,10 +8,12 @@ The application's state is persisted in XDG_DATA_HOME/wlmstr/data.json.
 
 - [ ]: check work video mode
 - [ ]: enhance help and error printings
-- [ ]: support flake pkg
+- [x]: support flake pkg
 - [ ]: feat: custom wallapepr contol command by config file(now, only support awww and mpbpaper)
 
-## Install with Home Manager
+## Install
+
+### with Home Manager
 
 Add `wlmstr` to your `flake.nix` inputs:
 
@@ -41,13 +43,7 @@ Then add the package to your Home Manager configuration:
 }
 ```
 
-## Run
-
-```bash
-nix run github:Uliboooo/wlmstr
-```
-
-## Install
+### with nix profile
 
 ```bash
 nix profile install github:Uliboooo/wlmstr
