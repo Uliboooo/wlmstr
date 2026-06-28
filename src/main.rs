@@ -11,7 +11,7 @@ mod status;
 
 #[derive(Debug)]
 enum Error {
-    FailedAwww(String, String),
+    FailedProcess(bool, String, String),
     Io(std::io::Error),
     NotFoundXDGDATAPATH,
     NotFoundSpecificImage,
@@ -20,6 +20,8 @@ enum Error {
     SerializeErr(serde_json::Error),
     FileIo(easy_storage::Error),
     NoWallpaperFound,
+    NotSupportFile(String),
+    ProcessFindErr(procfs::ProcError),
 }
 
 impl Display for Error {
@@ -41,9 +43,17 @@ impl Display for Error {
                 "Insufficient values; values for dir and start img path are all required for initialization."
             ),
             Error::SerializeErr(e) => write!(f, "Serialize Error: {}", e),
-            Error::FailedAwww(v, p) => write!(f, "failed to process awww: {}\n{}", v, p),
+            Error::FailedProcess(is_awww, v, p) => write!(
+                f,
+                "failed to process {}: {}\n{}",
+                if *is_awww { "awww" } else { "mpbpaper" },
+                v,
+                p
+            ),
             Error::FileIo(e) => write!(f, "File IO Error: {}", e),
             Error::NoWallpaperFound => todo!(),
+            Error::NotSupportFile(p) => write!(f, "not supports file type: {}", p),
+            Error::ProcessFindErr(proc_error) => write!(f, "{}", proc_error),
         }
     }
 }
@@ -58,31 +68,42 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Commands {
-    Next(Update),
+    Next(Next),
     Status(StatusCmd),
     Set(SetCmd),
 }
 
-// #[derive(Debug, Clone, ValueEnum, Serialize, Deserialize)]
-// enum Mode {
-//     Image,
-//     Video,
-// }
-
-// impl Display for Mode {
-//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-//         let res = match self {
-//             Mode::Image => "Image",
-//             Mode::Video => "Video",
-//         };
-//         write!(f, "{}", res)
-//     }
-// }
-
-/// next slide by derection [possible derection: seq, pre, rnd]
+/// next slide by derection [possible derection: seq, pre, rnd] seq is default.
 #[derive(Debug, Args)]
-struct Update {
-    derection: Direction,
+struct Next {
+    #[arg(default_value_t = Derection::Sequence)]
+    derection: Derection,
+}
+
+#[derive(Debug, Clone, ValueEnum)]
+enum Derection {
+    #[value(name = "seq")]
+    Sequence,
+
+    #[value(name = "pre")]
+    Previous,
+
+    #[value(name = "rnd")]
+    Random,
+}
+
+impl Display for Derection {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Derection::Sequence => "seq",
+                Derection::Previous => "pre",
+                Derection::Random => "rnd",
+            }
+        )
+    }
 }
 
 /// show current status(dir and paper path). supports to output in JSON or debug format
@@ -98,18 +119,6 @@ enum StatusFmt {
     Debug,
 }
 
-#[derive(Debug, Clone, ValueEnum)]
-enum Direction {
-    #[value(name = "seq")]
-    Sequence,
-
-    #[value(name = "pre")]
-    Previous,
-
-    #[value(name = "rnd")]
-    Random,
-}
-
 /// set config data
 #[derive(Debug, Args)]
 struct SetCmd {
@@ -118,8 +127,6 @@ struct SetCmd {
 
     #[arg(short = 'p', long = "path", help = "start iamge path of slides")]
     paper_path: Option<PathBuf>,
-    // #[arg(short = 'm', long = "mode", help = "mode")]
-    // mode: Option<Mode>,
 }
 
 fn resolve_data_path() -> Result<PathBuf, Error> {
@@ -157,11 +164,9 @@ fn run(cli_cmd: Commands) -> Result<(), Error> {
                 println!("{}", res);
                 return Ok(());
             }
-            Commands::Set(input_set_data) => st.set(
-                input_set_data.dir,
-                input_set_data.paper_path,
-                // input_set_data.mode,
-            )?,
+            Commands::Set(input_set_data) => {
+                st.set(input_set_data.dir, input_set_data.paper_path)?
+            }
         },
         Err(_) => {
             // when not found XDG_DATA_HOME/wlmstr/data.json

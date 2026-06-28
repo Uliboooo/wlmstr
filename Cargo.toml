@@ -1,6 +1,6 @@
 [package]
 name = "wlmstr"
-version = "0.5.0"
+version = "0.6.0"
 edition = "2024"
 
 [[bin]]
@@ -14,4 +14,5 @@ rand = "0.10.1"
 easy_storage = "0.5.0"
 serde = {version="1.0.228", features = ["derive"]}
 serde_json = "1.0.150"
-
+procfs = "0.18"
+libc = "0.2.186"

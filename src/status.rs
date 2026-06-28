@@ -1,6 +1,7 @@
-use crate::{Direction, Error};
+use crate::{Derection, Error};
 use easy_storage::Storeable;
 use itertools::Itertools;
+use procfs::process::all_processes;
 use rand::seq::IndexedRandom;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -8,6 +9,10 @@ use std::{
     path::{Path, PathBuf},
 };
 
+const SUPPURTED_IMAGES_TYPES: [&str; 13] = [
+    "avif", "jpeg", "jpg", "jpegxl", "png", "gif", "pnm", "tga", "tiff", "webp", "bmp", "farbfeld",
+    "svg",
+];
 const SUPPURTED_VIDEO_TYPES: [&str; 12] = [
     "mp4", "mkv", "webp", "avi", "mov", "flv", "m4v", "ts", "m2ts", "git", "apng", "webp",
 ];
@@ -16,7 +21,6 @@ const SUPPURTED_VIDEO_TYPES: [&str; 12] = [
 pub struct Status {
     dir_path: PathBuf,
     paper_path: PathBuf,
-    // mode: Mode,
 }
 
 impl Storeable for Status {}
@@ -28,7 +32,6 @@ impl Display for Status {
             "current dir: {}\ncurrent WallPaper: {}\n",
             self.dir_path.to_string_lossy(),
             self.paper_path.to_string_lossy(),
-            // self.mode
         )
     }
 }
@@ -38,7 +41,6 @@ impl Status {
         Self {
             dir_path,
             paper_path,
-            // mode,
         }
     }
 
@@ -72,13 +74,6 @@ impl Status {
         })
     }
 
-    // fn paper_exists(&self) -> Result<bool, std::io::Error> {
-    //     Ok(std::fs::read_dir(&self.dir_path)?
-    //         .filter_map(|f| f.ok())
-    //         .map(|f| f.path())
-    //         .any(|f| f == self.paper_path))
-    // }
-
     pub fn get_first_paper_in_dir<P: AsRef<Path>>(dir: P) -> Result<PathBuf, Error> {
         let res = std::fs::read_dir(&dir)
             .map_err(Error::Io)?
@@ -92,7 +87,7 @@ impl Status {
         Ok(res)
     }
 
-    pub fn update(self, derection: Direction, file_list: Vec<PathBuf>) -> Result<Status, Error> {
+    pub fn update(self, derection: Derection, file_list: Vec<PathBuf>) -> Result<Status, Error> {
         let sorted = file_list
             .iter()
             .sorted_by_key(|p| p.file_name().unwrap().to_os_string())
@@ -104,16 +99,16 @@ impl Status {
 
         let next = match sorted.iter().position(|x| **x == self.paper_path) {
             Some(pos) => match derection {
-                Direction::Sequence => {
+                Derection::Sequence => {
                     let next = (pos + 1) % sorted.len();
                     sorted.get(next)
                 }
-                Direction::Previous => {
+                Derection::Previous => {
                     let prev = if pos == 0 { sorted.len() - 1 } else { pos - 1 };
                     sorted.get(prev)
                 }
                 // pos.checked_sub(1).and_then(|p| sorted.get(p))},
-                Direction::Random => {
+                Derection::Random => {
                     let mut rng = rand::rng();
                     sorted.choose(&mut rng)
                 }
@@ -130,21 +125,23 @@ impl Status {
         Ok(Self {
             dir_path: self.dir_path,
             paper_path: next,
-            // mode: self.mode,
         })
     }
 
     pub fn apply(&self) -> Result<(), Error> {
         let path = self.paper_path.to_string_lossy().to_string();
-        let is_image = {
-            PathBuf::from(&path)
-                .extension()
-                .and_then(|f| f.to_str())
-                .map(|f| SUPPURTED_VIDEO_TYPES.iter().any(|t| t == &f))
-        }
-        .unwrap_or(false);
+
+        let row_is = is_image(&self.paper_path);
+        let is_image = row_is?;
 
         let res = if is_image {
+            if let Some(pid) = find_mpvpaper().map_err(Error::ProcessFindErr)? {
+                let pid: libc::pid_t = pid;
+                let ret = unsafe { libc::kill(pid, libc::SIGTERM) };
+                if ret == -1 {
+                    return Err(Error::Io(std::io::Error::last_os_error()));
+                }
+            }
             std::process::Command::new("awww")
                 .args([
                     "img",
@@ -157,7 +154,7 @@ impl Status {
                 .output()
         } else {
             let mpv_args = format!("--mpv-args=\"{}\"", "--hwdec=auto-safe --panscan=1.0");
-            std::process::Command::new("mpbpaper")
+            std::process::Command::new("mpvpaper")
                 .args([
                     "*",
                     self.paper_path.to_string_lossy().as_ref(),
@@ -173,7 +170,41 @@ impl Status {
 
         match res {
             Ok(_) => Ok(()),
-            Err(e) => Err(Error::FailedAwww(e.to_string(), path.to_string())),
+            Err(e) => Err(Error::FailedProcess(
+                is_image,
+                e.to_string(),
+                path.to_string(),
+            )),
         }
     }
+}
+
+fn is_image<P: AsRef<Path>>(path: P) -> Result<bool, Error> {
+    let a = &path
+        .as_ref()
+        .extension()
+        .ok_or(Error::NotSupportFile(
+            path.as_ref().to_string_lossy().to_string(),
+        ))?
+        .to_str()
+        .ok_or(Error::NotSupportFile(
+            path.as_ref().to_string_lossy().to_string(),
+        ))?
+        .to_lowercase();
+    match a.as_str() {
+        v if SUPPURTED_IMAGES_TYPES.contains(&v) => Ok(true),
+        v if SUPPURTED_VIDEO_TYPES.contains(&v) => Ok(false),
+        _ => Err(Error::NotSupportFile(
+            path.as_ref().to_string_lossy().to_string(),
+        )),
+    }
+}
+
+fn find_mpvpaper() -> Result<Option<i32>, procfs::ProcError> {
+    Ok(all_processes()?.filter_map(Result::ok).find_map(|p| {
+        p.cmdline()
+            .ok()
+            .filter(|cmdline| cmdline.iter().any(|s| s.contains("mpvpaper")))
+            .map(|_| p.pid())
+    }))
 }

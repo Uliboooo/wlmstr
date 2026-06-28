@@ -11,6 +11,11 @@ The application's state is persisted in XDG_DATA_HOME/wlmstr/data.json.
 - [x]: support flake pkg
 - [ ]: feat: custom wallapepr contol command by config file(now, only support awww and mpbpaper)
 
+## Required
+
+- awww
+- mpvpaper
+
 ## Install
 
 ### with Home Manager
