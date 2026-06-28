@@ -1,0 +1,6 @@
+return {
+  args = {
+    "next",
+    "seq",
+  },
+}

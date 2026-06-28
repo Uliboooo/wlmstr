@@ -1,3 +1,4 @@
+use crate::{Direction, Error};
 use easy_storage::Storeable;
 use itertools::Itertools;
 use rand::seq::IndexedRandom;
@@ -7,13 +8,15 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::{Direction, Error, Mode};
+const SUPPURTED_VIDEO_TYPES: [&str; 12] = [
+    "mp4", "mkv", "webp", "avi", "mov", "flv", "m4v", "ts", "m2ts", "git", "apng", "webp",
+];
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Status {
     dir_path: PathBuf,
     paper_path: PathBuf,
-    mode: Mode,
+    // mode: Mode,
 }
 
 impl Storeable for Status {}
@@ -22,20 +25,20 @@ impl Display for Status {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "current dir: {}\ncurrent WallPaper: {}\nMode: {}",
+            "current dir: {}\ncurrent WallPaper: {}\n",
             self.dir_path.to_string_lossy(),
             self.paper_path.to_string_lossy(),
-            self.mode
+            // self.mode
         )
     }
 }
 
 impl Status {
-    pub fn new(dir_path: PathBuf, paper_path: PathBuf, mode: Mode) -> Self {
+    pub fn new(dir_path: PathBuf, paper_path: PathBuf) -> Self {
         Self {
             dir_path,
             paper_path,
-            mode,
+            // mode,
         }
     }
 
@@ -51,28 +54,21 @@ impl Status {
         self,
         dir: Option<PathBuf>,
         path: Option<PathBuf>,
-        mode: Option<Mode>,
+        // mode: Option<Mode>,
     ) -> Result<Self, Error> {
-        let res = match (dir, path, mode) {
-            (None, None, None) => (self.dir_path, self.paper_path, self.mode),
-            (None, None, Some(v)) => (self.dir_path, self.paper_path, v),
-            (None, Some(path), None) => (self.dir_path, path, self.mode),
-            (None, Some(v), Some(mode)) => (self.dir_path, v, mode),
-            (Some(dir), None, None) => {
-                let pp = Self::get_valid_paper_in_dir(&dir)?;
-                (dir, pp, self.mode)
+        let res = match (dir, path) {
+            (None, None) => (self.dir_path, self.paper_path),
+            (None, Some(path)) => (self.dir_path, path),
+            (Some(dir), None) => {
+                let pp = Self::get_first_paper_in_dir(&dir)?;
+                (dir, pp)
             }
-            (Some(dir), None, Some(mode)) => {
-                let pp = Self::get_valid_paper_in_dir(&dir)?;
-                (dir, pp, mode)
-            }
-            (Some(dir), Some(path), None) => (dir, path, self.mode),
-            (Some(dir), Some(path), Some(mode)) => (dir, path, mode),
+            (Some(dir), Some(path)) => (dir, path),
         };
         Ok(Self {
             dir_path: res.0,
             paper_path: res.1,
-            mode: res.2,
+            // mode: res.2,
         })
     }
 
@@ -83,8 +79,8 @@ impl Status {
     //         .any(|f| f == self.paper_path))
     // }
 
-    fn get_valid_paper_in_dir<P: AsRef<Path>>(p: P) -> Result<PathBuf, Error> {
-        let res = std::fs::read_dir(&p)
+    pub fn get_first_paper_in_dir<P: AsRef<Path>>(dir: P) -> Result<PathBuf, Error> {
+        let res = std::fs::read_dir(&dir)
             .map_err(Error::Io)?
             // .unwrap()
             .next()
@@ -134,14 +130,22 @@ impl Status {
         Ok(Self {
             dir_path: self.dir_path,
             paper_path: next,
-            mode: self.mode,
+            // mode: self.mode,
         })
     }
 
     pub fn apply(&self) -> Result<(), Error> {
         let path = self.paper_path.to_string_lossy().to_string();
-        let res = match self.mode {
-            Mode::Images => std::process::Command::new("awww")
+        let is_image = {
+            PathBuf::from(&path)
+                .extension()
+                .and_then(|f| f.to_str())
+                .map(|f| SUPPURTED_VIDEO_TYPES.iter().any(|t| t == &f))
+        }
+        .unwrap_or(false);
+
+        let res = if is_image {
+            std::process::Command::new("awww")
                 .args([
                     "img",
                     &path,
@@ -150,27 +154,26 @@ impl Status {
                     "--transition-duration",
                     "0.5",
                 ])
-                .output(),
-            Mode::Videos => {
-                let mpv_args = format!("--mpv-args=\"{}\"", "--hwdec=auto-safe --panscan=1.0");
-                std::process::Command::new("mpbpaper")
-                    .args([
-                        "*",
-                        self.paper_path.to_string_lossy().as_ref(),
-                        "-o",
-                        "no-audio loop",
-                        "--fork",
-                        "-o",
-                        "no-audio loop --panscan=1.0",
-                        &mpv_args,
-                    ])
-                    .output()
-            }
+                .output()
+        } else {
+            let mpv_args = format!("--mpv-args=\"{}\"", "--hwdec=auto-safe --panscan=1.0");
+            std::process::Command::new("mpbpaper")
+                .args([
+                    "*",
+                    self.paper_path.to_string_lossy().as_ref(),
+                    "-o",
+                    "no-audio loop",
+                    "--fork",
+                    "-o",
+                    "no-audio loop --panscan=1.0",
+                    &mpv_args,
+                ])
+                .output()
         };
 
         match res {
             Ok(_) => Ok(()),
-            Err(e) => Err(Error::FailedAwww(e.to_string())),
+            Err(e) => Err(Error::FailedAwww(e.to_string(), path.to_string())),
         }
     }
 }

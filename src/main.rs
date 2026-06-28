@@ -1,7 +1,7 @@
 use crate::status::Status;
 use clap::{Args, Parser, Subcommand, ValueEnum, error::Result};
 use easy_storage::Storeable;
-use serde::{Deserialize, Serialize};
+// use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 use std::path::PathBuf;
 
@@ -11,7 +11,7 @@ mod status;
 
 #[derive(Debug)]
 enum Error {
-    FailedAwww(String),
+    FailedAwww(String, String),
     Io(std::io::Error),
     NotFoundXDGDATAPATH,
     NotFoundSpecificImage,
@@ -41,7 +41,7 @@ impl Display for Error {
                 "Insufficient values; values for dir and start img path are all required for initialization."
             ),
             Error::SerializeErr(e) => write!(f, "Serialize Error: {}", e),
-            Error::FailedAwww(v) => write!(f, "failed to process awww: {}", v),
+            Error::FailedAwww(v, p) => write!(f, "failed to process awww: {}\n{}", v, p),
             Error::FileIo(e) => write!(f, "File IO Error: {}", e),
             Error::NoWallpaperFound => todo!(),
         }
@@ -63,21 +63,21 @@ enum Commands {
     Set(SetCmd),
 }
 
-#[derive(Debug, Clone, ValueEnum, Serialize, Deserialize)]
-enum Mode {
-    Images,
-    Videos,
-}
+// #[derive(Debug, Clone, ValueEnum, Serialize, Deserialize)]
+// enum Mode {
+//     Image,
+//     Video,
+// }
 
-impl Display for Mode {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let res = match self {
-            Mode::Images => "Image",
-            Mode::Videos => "Video",
-        };
-        write!(f, "{}", res)
-    }
-}
+// impl Display for Mode {
+//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//         let res = match self {
+//             Mode::Image => "Image",
+//             Mode::Video => "Video",
+//         };
+//         write!(f, "{}", res)
+//     }
+// }
 
 /// next slide by derection [possible derection: seq, pre, rnd]
 #[derive(Debug, Args)]
@@ -85,7 +85,7 @@ struct Update {
     derection: Direction,
 }
 
-/// show status. supports to output in JSON or debug format
+/// show current status(dir and paper path). supports to output in JSON or debug format
 #[derive(Debug, Args)]
 struct StatusCmd {
     /// Default is Debug
@@ -118,9 +118,8 @@ struct SetCmd {
 
     #[arg(short = 'p', long = "path", help = "start iamge path of slides")]
     paper_path: Option<PathBuf>,
-
-    #[arg(short = 'm', long = "mode", help = "mode")]
-    mode: Option<Mode>,
+    // #[arg(short = 'm', long = "mode", help = "mode")]
+    // mode: Option<Mode>,
 }
 
 fn resolve_data_path() -> Result<PathBuf, Error> {
@@ -161,15 +160,18 @@ fn run(cli_cmd: Commands) -> Result<(), Error> {
             Commands::Set(input_set_data) => st.set(
                 input_set_data.dir,
                 input_set_data.paper_path,
-                input_set_data.mode,
+                // input_set_data.mode,
             )?,
         },
         Err(_) => {
             // when not found XDG_DATA_HOME/wlmstr/data.json
             match cli_cmd {
-                Commands::Set(set) => match (set.dir, set.paper_path, set.mode) {
-                    (Some(v), Some(w), Some(x)) => Status::new(v, w, x),
-                    (Some(v), Some(w), None) => Status::new(v, w, Mode::Images),
+                Commands::Set(set) => match (set.dir, set.paper_path) {
+                    (Some(dir), Some(p_path)) => Status::new(dir, p_path),
+                    (Some(dir), None) => {
+                        let d = Status::get_first_paper_in_dir(&dir)?;
+                        Status::new(dir, d)
+                    }
                     _ => return Err(Error::InsufficientValues),
                 },
                 _ => return Err(Error::ValueNotSet),
@@ -189,7 +191,8 @@ fn run(cli_cmd: Commands) -> Result<(), Error> {
 
 fn main() {
     let cli = Cli::parse();
-    match run(cli.command) {
+    let res = run(cli.command);
+    match res {
         Ok(_) => std::process::exit(0),
         Err(e) => {
             eprint!("{}", e);
