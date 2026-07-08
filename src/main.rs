@@ -14,7 +14,6 @@ enum Error {
     FailedProcess(bool, String, String),
     Io(std::io::Error),
     NotFoundXDGDATAPATH,
-    NotFoundSpecificImage,
     ValueNotSet,
     InsufficientValues,
     SerializeErr(serde_json::Error),
@@ -33,7 +32,6 @@ impl Display for Error {
                 "XDG_DATA_HOME is not set.\n\nThis program uses XDG_DATA_HOME/{}/ to store its data.\nIf you are not using Linux or a standard XDG-compatible environment,please set the XDG_DATA_HOME environment variable manually.Not dound XDG_DATA_HOME.\nThis Program use XDG_DATA_HOME/{}/ to keep path data.\nIf you don't use Linux or standard envrinment",
                 PROGRAM_NAME, PROGRAM_NAME
             ),
-            Error::NotFoundSpecificImage => todo!(),
             Error::ValueNotSet => write!(
                 f,
                 "The wallpaper directory path has not been set.\nPlease run `set` subcommand\nwlmstr set -d <dir-path> -p <start-img-path>)"
@@ -144,13 +142,13 @@ fn run(cli_cmd: Commands) -> Result<(), Error> {
 
     let new_st = match Status::load_by_extension(&data_path) {
         Ok(st) => match cli_cmd {
-            Commands::Next(update) => {
-                let list = std::fs::read_dir(st.get_dir_path())
+            Commands::Next(next_prm) => {
+                let loaded_path_lst = std::fs::read_dir(st.get_dir_path())
                     .map_err(Error::Io)?
                     .filter_map(|f| f.ok())
                     .map(|f| f.path())
                     .collect::<Vec<_>>();
-                let s = st.update(update.derection, list)?;
+                let s = st.update(next_prm.derection, loaded_path_lst)?;
                 s.apply()?;
                 s
             }
