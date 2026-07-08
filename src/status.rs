@@ -107,20 +107,42 @@ impl Status {
                     let prev = if pos == 0 { sorted.len() - 1 } else { pos - 1 };
                     sorted.get(prev)
                 }
-                // pos.checked_sub(1).and_then(|p| sorted.get(p))},
                 Derection::Random => {
                     let mut rng = rand::rng();
                     sorted.choose(&mut rng)
                 }
             },
-            None => None,
+            None => match derection {
+                Derection::Random => {
+                    let mut rng = rand::rng();
+                    sorted.choose(&mut rng)
+                }
+                _ => {
+                    // self.paper_path no longer exists in dir_path (renamed/removed
+                    // since last run). Find where its filename would sort among the
+                    // current entries and resume rotation from there, instead of
+                    // resetting to the start of the list.
+                    let target = self
+                        .paper_path
+                        .file_name()
+                        .unwrap_or_else(|| std::ffi::OsStr::new(""));
+                    let insertion_idx = sorted
+                        .binary_search_by_key(&target, |p| {
+                            p.file_name().unwrap_or_else(|| std::ffi::OsStr::new(""))
+                        })
+                        .unwrap_or_else(|idx| idx);
+
+                    let idx = match derection {
+                        Derection::Sequence => insertion_idx % sorted.len(),
+                        Derection::Previous => (insertion_idx + sorted.len() - 1) % sorted.len(),
+                        Derection::Random => unreachable!(),
+                    };
+                    sorted.get(idx)
+                }
+            },
         }
         .unwrap_or(&&self.paper_path)
         .to_path_buf();
-
-        if !self.paper_path.exists() {
-            return Err(Error::NotFoundSpecificImage);
-        }
 
         Ok(Self {
             dir_path: self.dir_path,
