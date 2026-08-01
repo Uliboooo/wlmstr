@@ -18,6 +18,35 @@ const SUPPURTED_VIDEO_TYPES: [&str; 12] = [
 ];
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct FmtStatus {
+    dir_path: PathBuf,
+    paper_path: PathBuf,
+    next_path: PathBuf,
+}
+
+impl Display for FmtStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "current dir: {}\ncurrent WallPaper: {}\nnext wallpaper: {}\n",
+            self.dir_path.to_string_lossy(),
+            self.paper_path.to_string_lossy(),
+            self.next_path.to_string_lossy(),
+        )
+    }
+}
+
+impl FmtStatus {
+    pub fn new(st: &Status, next_path: PathBuf) -> Self {
+        Self {
+            dir_path: st.dir_path.clone(),
+            paper_path: st.paper_path.clone(),
+            next_path,
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Status {
     dir_path: PathBuf,
     paper_path: PathBuf,
@@ -87,7 +116,7 @@ impl Status {
         Ok(res)
     }
 
-    pub fn update(self, derection: Derection, file_list: Vec<PathBuf>) -> Result<Status, Error> {
+    pub fn next(&self, derection: Derection, file_list: Vec<PathBuf>) -> Result<Status, Error> {
         let sorted = file_list
             .iter()
             .sorted_by_key(|p| p.file_name().unwrap().to_os_string())
@@ -145,7 +174,7 @@ impl Status {
         .to_path_buf();
 
         Ok(Self {
-            dir_path: self.dir_path,
+            dir_path: self.dir_path.clone(),
             paper_path: next,
         })
     }

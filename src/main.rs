@@ -1,4 +1,5 @@
-use crate::status::Status;
+use crate::Derection::Sequence;
+use crate::status::{FmtStatus, Status};
 use clap::{Args, Parser, Subcommand, ValueEnum, error::Result};
 use easy_storage::Storeable;
 // use serde::{Deserialize, Serialize};
@@ -140,30 +141,42 @@ fn resolve_data_path() -> Result<PathBuf, Error> {
 fn run(cli_cmd: Commands) -> Result<(), Error> {
     let data_path = resolve_data_path()?;
 
+    let load_paths = |dir: PathBuf| -> Result<Vec<std::path::PathBuf>, Error> {
+        Ok(std::fs::read_dir(dir)
+            .map_err(Error::Io)?
+            .filter_map(Result::ok)
+            .map(|entry| entry.path())
+            .collect())
+    };
+
+    // let loaded_path_lst = load_paths(loaded_status.get_dir_path())?;
     let new_st = match Status::load_by_extension(&data_path) {
-        Ok(st) => match cli_cmd {
+        Ok(loaded_status) => match cli_cmd {
             Commands::Next(next_prm) => {
-                let loaded_path_lst = std::fs::read_dir(st.get_dir_path())
-                    .map_err(Error::Io)?
-                    .filter_map(|f| f.ok())
-                    .map(|f| f.path())
-                    .collect::<Vec<_>>();
-                let s = st.update(next_prm.derection, loaded_path_lst)?;
+                let loaded_path_lst = load_paths(loaded_status.get_dir_path())?;
+                let s = loaded_status.next(next_prm.derection, loaded_path_lst)?;
                 s.apply()?;
                 s
             }
             Commands::Status(sc) => {
+                let next_path = {
+                    let loaded_path_lst = load_paths(loaded_status.get_dir_path())?;
+                    loaded_status
+                        .next(Sequence, loaded_path_lst)?
+                        .get_current_p_path()
+                };
+                let formatted = FmtStatus::new(&loaded_status, next_path);
                 let res = match sc.format.unwrap_or(StatusFmt::Debug) {
                     StatusFmt::Json => {
-                        serde_json::to_string_pretty(&st).map_err(Error::SerializeErr)?
+                        serde_json::to_string_pretty(&formatted).map_err(Error::SerializeErr)?
                     }
-                    StatusFmt::Debug => st.to_string(),
+                    StatusFmt::Debug => formatted.to_string(),
                 };
                 println!("{}", res);
                 return Ok(());
             }
             Commands::Set(input_set_data) => {
-                st.set(input_set_data.dir, input_set_data.paper_path)?
+                loaded_status.set(input_set_data.dir, input_set_data.paper_path)?
             }
         },
         Err(_) => {
