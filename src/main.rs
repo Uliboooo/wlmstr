@@ -1,5 +1,5 @@
 use crate::status::Status;
-use clap::{Args, Parser, Subcommand, ValueEnum, error::Result};
+use clap::{error::Result, Args, Parser, Subcommand, ValueEnum};
 use easy_storage::Storeable;
 // use serde::{Deserialize, Serialize};
 use std::fmt::Display;

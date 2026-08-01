@@ -7,6 +7,13 @@ edition = "2024"
 name = "wlmstr"
 path = "src/main.rs"
 
+# [profile.release]
+# opt-level = 3     # デフォルト。サイズ優先なら "s"/"z"
+# lto = "fat"       # クレート横断のインライン化。"thin" は速度と時間の妥協点
+# codegen-units = 1 # 並列コンパイルを捨てて最適化品質を上げる
+# panic = "abort"   # 巻き戻しコードを削除
+# strip = "symbols" # バイナリ縮小（速度への寄与は間接的）
+
 [dependencies]
 clap = { version = "4.6.1", features = ["derive"] }
 itertools = "0.15"
